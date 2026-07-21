@@ -17,6 +17,17 @@ Lucas' PhD Toolbox lets you install production web apps from GitHub Releases and
 
 ---
 
+## Available Tools
+
+The launcher comes pre-configured with a catalog of the following productivity and research applications:
+
+- **[Job Application Tracker](https://github.com/LucasFenaux/job-application-tracker)** — A localized database to track job applications, companies, and interview statuses.
+- **[Literature Map](https://github.com/LucasFenaux/literature-map)** — A visual node-graph tool for academic literature review and exploring connections between research papers.
+- **[Portfolio Analytics](https://github.com/LucasFenaux/portfolio-analytics)** — Financial tracking and analytics dashboard for personal investment portfolios.
+- **[Core Planner](https://github.com/LucasFenaux/core-planner)** — An all-in-one productivity suite, daily planner, and task manager.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
