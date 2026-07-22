@@ -474,12 +474,12 @@ fn backup_data(app_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn check_update(app_id: String) -> Result<bool, String> {
+fn check_update(app_id: String) -> Result<Option<String>, String> {
     let apps = get_catalog_base();
     let app = apps.iter().find(|a| a.id == app_id).ok_or("App not found")?;
     
     if app.mode != "prod" {
-        return Ok(false);
+        return Ok(None);
     }
     
     let app_dir = get_app_dir(app);
@@ -487,13 +487,13 @@ fn check_update(app_id: String) -> Result<bool, String> {
     version_path.push(".version");
     
     if !version_path.exists() {
-        return Ok(false);
+        return Ok(None);
     }
     
     let current_version = fs::read_to_string(version_path).unwrap_or_else(|_| "".into());
     
     let parts: Vec<&str> = app.repo_url.split('/').collect();
-    if parts.len() < 2 { return Ok(false); }
+    if parts.len() < 2 { return Ok(None); }
     let repo = parts.last().unwrap();
     let owner = parts[parts.len() - 2];
     
@@ -505,11 +505,13 @@ fn check_update(app_id: String) -> Result<bool, String> {
     if let Ok(resp) = client.get(&api_url).send() {
         if let Ok(json) = resp.json::<serde_json::Value>() {
             let latest_version = json.get("tag_name").and_then(|t| t.as_str()).unwrap_or("");
-            return Ok(latest_version != "" && latest_version != current_version);
+            if latest_version != "" && latest_version != current_version {
+                return Ok(Some(latest_version.to_string()));
+            }
         }
     }
     
-    Ok(false)
+    Ok(None)
 }
 
 #[tauri::command]

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Play, Square, FolderDown, Loader2, ExternalLink, RefreshCw, CloudDownload, RefreshCcw } from "lucide-react";
@@ -7,10 +7,12 @@ import { AppInfo } from "../types";
 export default function Library() {
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [loadingApp, setLoadingApp] = useState<Record<string, boolean>>({});
-  const [updatesAvailable, setUpdatesAvailable] = useState<Record<string, boolean>>({});
+  const [updatesAvailable, setUpdatesAvailable] = useState<Record<string, string>>({});
   const [checkingUpdate, setCheckingUpdate] = useState<Record<string, boolean>>({});
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null);
+  
+  const hasCheckedUpdates = useRef(false);
 
   const fetchApps = async () => {
     try {
@@ -83,6 +85,21 @@ export default function Library() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (apps.length > 0 && !hasCheckedUpdates.current) {
+      hasCheckedUpdates.current = true;
+      apps.forEach(app => {
+        if (app.mode === "prod") {
+          invoke("check_update", { appId: app.id }).then(latestVersion => {
+            if (latestVersion) {
+              setUpdatesAvailable(prev => ({ ...prev, [app.id]: latestVersion as string }));
+            }
+          }).catch(console.error);
+        }
+      });
+    }
+  }, [apps]);
+
   const handleLaunch = async (appId: string) => {
     setLoadingApp({ ...loadingApp, [appId]: true });
     try {
@@ -145,10 +162,11 @@ export default function Library() {
   const handleCheckUpdate = async (appId: string) => {
     setCheckingUpdate({ ...checkingUpdate, [appId]: true });
     try {
-      const hasUpdate: boolean = await invoke("check_update", { appId });
-      setUpdatesAvailable({ ...updatesAvailable, [appId]: hasUpdate });
-      if (!hasUpdate) {
-         alert("App is up-to-date!");
+      const latestVersion: string | null = await invoke("check_update", { appId });
+      if (latestVersion) {
+        setUpdatesAvailable({ ...updatesAvailable, [appId]: latestVersion });
+      } else {
+        alert("App is up-to-date!");
       }
     } catch (err) {
       console.error("Failed to check for updates:", err);
@@ -162,7 +180,11 @@ export default function Library() {
     setCheckingUpdate({ ...checkingUpdate, [appId]: true });
     try {
       await invoke("install_app", { appId });
-      setUpdatesAvailable({ ...updatesAvailable, [appId]: false });
+      setUpdatesAvailable(prev => {
+        const next = { ...prev };
+        delete next[appId];
+        return next;
+      });
       alert("App updated successfully!");
     } catch (err) {
       console.error("Failed to update app:", err);
@@ -219,6 +241,11 @@ export default function Library() {
                     <span className={`badge ${app.mode === "prod" ? "badge-prod" : "badge-dev"}`}>
                       {app.mode}
                     </span>
+                    {updatesAvailable[app.id] && (
+                      <span className="badge" style={{ backgroundColor: "var(--accent-warning)", color: "#000" }}>
+                        Update: {updatesAvailable[app.id]}
+                      </span>
+                    )}
                   </div>
                 </div>
                 
