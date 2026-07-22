@@ -9,6 +9,7 @@ export default function Library() {
   const [loadingApp, setLoadingApp] = useState<Record<string, boolean>>({});
   const [updatesAvailable, setUpdatesAvailable] = useState<Record<string, string>>({});
   const [checkingUpdate, setCheckingUpdate] = useState<Record<string, boolean>>({});
+  const [isCheckingAllUpdates, setIsCheckingAllUpdates] = useState(false);
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
   const [dragOverAppId, setDragOverAppId] = useState<string | null>(null);
   
@@ -159,20 +160,42 @@ export default function Library() {
     }
   };
 
-  const handleCheckUpdate = async (appId: string) => {
-    setCheckingUpdate({ ...checkingUpdate, [appId]: true });
+  const handleCheckAllUpdates = async () => {
+    if (isCheckingAllUpdates) return;
+    setIsCheckingAllUpdates(true);
+    
+    let updatesFound = 0;
+    const newUpdates: Record<string, string> = {};
+    
     try {
-      const latestVersion: string | null = await invoke("check_update", { appId });
-      if (latestVersion) {
-        setUpdatesAvailable({ ...updatesAvailable, [appId]: latestVersion });
+      // Check for launcher update first
+      const launcherUpdate: string | null = await invoke("check_launcher_update");
+      if (launcherUpdate) {
+        if (window.confirm(`A new version of the Launcher (${launcherUpdate}) is available!\n\nWould you like to open GitHub to download it?`)) {
+          await openUrl("https://github.com/LucasFenaux/phd-toolbox/releases/latest");
+        }
+      }
+      
+      const prodApps = apps.filter(a => a.mode === "prod");
+      for (const app of prodApps) {
+        const latestVersion: string | null = await invoke("check_update", { appId: app.id });
+        if (latestVersion) {
+          newUpdates[app.id] = latestVersion;
+          updatesFound++;
+        }
+      }
+      setUpdatesAvailable(prev => ({ ...prev, ...newUpdates }));
+      
+      if (updatesFound > 0) {
+        alert(`Found updates for ${updatesFound} app(s)!`);
       } else {
-        alert("App is up-to-date!");
+        alert("All apps are up-to-date!");
       }
     } catch (err) {
       console.error("Failed to check for updates:", err);
       alert(`Check failed: ${err}`);
     } finally {
-      setCheckingUpdate({ ...checkingUpdate, [appId]: false });
+      setIsCheckingAllUpdates(false);
     }
   };
 
@@ -196,11 +219,21 @@ export default function Library() {
 
   return (
     <>
-      <div className="content-header">
-        <h1>Library</h1>
-        <p style={{ color: "var(--text-secondary)", marginTop: "8px" }}>
-          Your installed applications.
-        </p>
+      <div className="content-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1>Library</h1>
+          <p style={{ color: "var(--text-secondary)", marginTop: "8px" }}>
+            Your installed applications.
+          </p>
+        </div>
+        <button 
+          className="btn btn-secondary" 
+          onClick={handleCheckAllUpdates}
+          disabled={isCheckingAllUpdates}
+        >
+          {isCheckingAllUpdates ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />} 
+          Check for Updates
+        </button>
       </div>
       
       <div className="content-body">
@@ -300,28 +333,15 @@ export default function Library() {
                     <FolderDown size={16} />
                   </button>
                   
-                  {app.mode === "prod" && (
-                    <>
-                      {!updatesAvailable[app.id] ? (
-                        <button 
-                          className="btn btn-secondary" 
-                          onClick={() => handleCheckUpdate(app.id)}
-                          disabled={checkingUpdate[app.id]}
-                          title="Check for updates"
-                        >
-                          {checkingUpdate[app.id] ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />} Check
-                        </button>
-                      ) : (
-                        <button 
-                          className="btn btn-success" 
-                          onClick={() => handleUpdate(app.id)}
-                          disabled={checkingUpdate[app.id]}
-                          title="Install update"
-                        >
-                          {checkingUpdate[app.id] ? <Loader2 size={16} className="animate-spin" /> : <CloudDownload size={16} />} Update
-                        </button>
-                      )}
-                    </>
+                  {app.mode === "prod" && updatesAvailable[app.id] && (
+                    <button 
+                      className="btn btn-success" 
+                      onClick={() => handleUpdate(app.id)}
+                      disabled={checkingUpdate[app.id]}
+                      title={`Install update ${updatesAvailable[app.id]}`}
+                    >
+                      {checkingUpdate[app.id] ? <Loader2 size={16} className="animate-spin" /> : <CloudDownload size={16} />} Update
+                    </button>
                   )}
                 </div>
               </div>

@@ -259,28 +259,36 @@ fn install_app(app_id: String) -> Result<(), String> {
     let target_arch = std::env::consts::ARCH;
     
     let mut download_url = None;
+    let mut fallback_url = None;
+    
     for asset in assets {
         let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("").to_lowercase();
         if target_os == "macos" {
-            if name.contains("macos") && (
-                (target_arch == "aarch64" && name.contains("arm64")) || 
-                (target_arch == "x86_64" && (name.contains("x64") || name.contains("x86_64"))) || 
-                (!name.contains("arm") && !name.contains("x64") && !name.contains("x86_64") && !name.contains("arm64")) 
-            ) {
-                download_url = asset.get("browser_download_url").and_then(|u| u.as_str());
-                break;
+            if name.contains("macos") {
+                fallback_url = asset.get("browser_download_url").and_then(|u| u.as_str());
+                if (target_arch == "aarch64" && name.contains("arm64")) || 
+                   (target_arch == "x86_64" && (name.contains("x64") || name.contains("x86_64"))) || 
+                   (!name.contains("arm") && !name.contains("x64") && !name.contains("x86_64") && !name.contains("arm64")) 
+                {
+                    download_url = fallback_url;
+                    break;
+                }
             }
         } else if target_os == "windows" {
             if name.contains("windows") || name.contains("win") {
                 download_url = asset.get("browser_download_url").and_then(|u| u.as_str());
                 break;
             }
-        } else {
+        } else if target_os == "linux" {
             if name.contains("linux") {
                 download_url = asset.get("browser_download_url").and_then(|u| u.as_str());
                 break;
             }
         }
+    }
+    
+    if download_url.is_none() && fallback_url.is_some() {
+        download_url = fallback_url;
     }
     
     if let Some(url) = download_url {
@@ -486,11 +494,11 @@ fn check_update(app_id: String) -> Result<Option<String>, String> {
     let mut version_path = app_dir.clone();
     version_path.push(".version");
     
-    if !version_path.exists() {
-        return Ok(None);
-    }
-    
-    let current_version = fs::read_to_string(version_path).unwrap_or_else(|_| "".into());
+    let current_version = if version_path.exists() {
+        fs::read_to_string(version_path).unwrap_or_else(|_| "".into())
+    } else {
+        "".into()
+    };
     
     let parts: Vec<&str> = app.repo_url.split('/').collect();
     if parts.len() < 2 { return Ok(None); }
@@ -516,9 +524,14 @@ fn check_update(app_id: String) -> Result<Option<String>, String> {
 
 #[tauri::command]
 fn check_launcher_update(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(debug_assertions)]
+    {
+        return Ok(None);
+    }
+    
     let current_version = app_handle.package_info().version.to_string();
     
-    let api_url = "https://api.github.com/repos/LucasFenaux/launcher/releases/latest";
+    let api_url = "https://api.github.com/repos/LucasFenaux/phd-toolbox/releases/latest";
     let client = reqwest::blocking::Client::builder()
         .user_agent("WebAppLauncher")
         .build().unwrap();
@@ -612,7 +625,7 @@ pub fn run() {
             set_backup_dir,
             backup_data,
             check_update,
-            check_launcher_update
+            check_launcher_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
